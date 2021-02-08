@@ -1,0 +1,109 @@
+# author: Kitahara Kazusa
+# date: 2021/2/7
+
+from math import log
+import operator
+import plotTree as dtplot
+"""
+Use Shannon entropy to build decision tree
+"""
+def calEntropy(dataset):
+    dataNum = len(dataset)
+    labelsCnt = {}
+    for curr in dataset:
+        currLabel = curr[-1] # Means the last data for each line stands for label
+        if currLabel not in labelsCnt:
+            labelsCnt[currLabel] = 0
+        labelsCnt[currLabel] += 1
+
+    ''' Calculate entropy '''
+    entropy = 0.0
+    for key in labelsCnt:
+        prob = float(labelsCnt[key]) / dataNum
+        entropy -= prob * log(prob, 2)
+    return entropy
+
+def splitData(dataset, index, val):
+    """
+    if eachdata[index] == val, append it into a list and return
+    while append it into result, we need delete eachdata[index] from it
+    """
+    res = []
+    for curr in dataset:
+        partCurr = curr[:index]
+        if curr[index] == val:
+            partCurr.extend(curr[index+1:])
+            res.append(partCurr)
+    return res
+
+def selectFeature(dataset):
+    """
+    Choose the best feature(index) to spilt dataset
+    """
+    featureNum = len(dataset[0]) - 1
+    currEntropy = calEntropy(dataset)
+    inforGain = 0.0
+    res = -1
+
+    for index in range(featureNum):
+        featureList = set([example[index] for example in dataset])
+        tmpEntropy = 0.0
+        for value in featureList:
+            subSet = splitData(dataset, index, value)
+            prob = float(len(subSet)) / len(dataset)
+            tmpEntropy += prob * calEntropy(subSet)
+        currInforGain = currEntropy - tmpEntropy # After spilt, we want entropy become smaller
+        if currInforGain > inforGain:
+            inforGain = currInforGain
+            res = index
+    return res
+
+def majorClass(classList):
+    classCnt = {}
+    for i in classList:
+        if i not in classCnt.keys():
+            classCnt[i] = 0
+        classCnt[i] += 1
+    classCnt = sorted(classCnt.iteritem(), key = operator.itemgetter(1), reverse = True)
+    return classCnt[0][0]
+
+def creatTree(dataset):
+    classList = [example[-1] for example in dataset]
+
+    if classList.count(classList[0]) == len(classList): # Only have one class
+        return classList[0]
+    if len(dataset[0]) == 1: # When there is only one feature, return the class that show most time
+        return majorClass(classList)
+
+    index = selectFeature(dataset)
+    decTree = {index: {}}
+    featureValue = set([example[index] for example in dataset])
+    for value in featureValue:
+        decTree[index][value] = creatTree(splitData(dataset, index, value))
+    return decTree
+
+def classify(tree, featureLabel, testVec):
+    """
+    Perform classification using decision trees
+    """
+    root = list(tree.keys())[0] # find the first feature to classify
+    subTree = tree[root]
+    featureIndex = featureLabel.index(root)
+    valOfFeature = testVec[featureIndex] # what value is in that feature
+    resType = subTree[valOfFeature]
+    if isinstance(resType, dict):
+        classLabel = classify(resType, featureLabel, testVec)
+    else:
+        classLabel = resType
+    return classLabel
+
+def lenTest():
+    fp = open(r'C:\Users\86519\Desktop\ML\3.DecisionTree\lenses.txt')
+    lenses = [inst.strip().split('\t') for inst in fp.readlines()]
+    lenLabel = ['age', 'prescript', 'astigmatic', 'tearRate']
+    tree = creatTree(lenses)
+    print(tree)
+    dtplot.creatPlot(tree)
+
+if __name__ == "__main__":
+    lenTest()
