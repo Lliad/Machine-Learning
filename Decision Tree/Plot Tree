@@ -1,0 +1,74 @@
+# author: Kitahara Kazusa
+# date: 2021/2/7
+
+import matplotlib.pyplot as plt
+
+decisionNode = dict(boxstyle = "sawtooth", fc = "0.8")
+leafNode = dict(boxstyle = "round4", fc = "0.8")
+arrow_args = dict(arrowstyle = "<-")
+
+def getLeafNum(tree):
+    leafNum = 0
+    first = list(tree.keys())[0]
+    second = tree[first]
+    for i in second.keys():
+        if type(second[i]) is dict:
+            leafNum += getLeafNum(second[i])
+        else:
+            leafNum += 1
+    return leafNum
+
+def getDepth(tree):
+    depth = 0
+    first = list(tree.keys())[0]
+    second = tree[first]
+    for i in second.keys():
+        if type(second[i]) is dict:
+            currdepth = 1 + getDepth(second[i])
+        else:
+            currdepth = 1
+        depth = max(depth, currdepth)
+    return depth
+
+def plotNode(nodeTxt, centerPt, parentPt, nodeType):
+    creatPlot.ax1.annotate(nodeTxt, xy = parentPt, xycoords = 'axes fraction',
+                           xytext = centerPt, textcoords = 'axes fraction',
+                           ha = "center", bbox = nodeType, arrowprops = arrow_args)
+
+def plotMidText(centerPt, parentPt, nodeTxt):
+    xMid = (parentPt[0] - centerPt[0]) / 2.0 + centerPt[0]
+    yMid = (parentPt[1] - centerPt[1]) / 2.0 + centerPt[1]
+    creatPlot.ax1.text(xMid, yMid, nodeTxt, va = "center", rotation = 30)
+
+def plotTree(tree, parentPt, nodeTxt):
+    leafNum = getLeafNum(tree)
+    cntrPt = (plotTree.xoff + (1.0 + float(leafNum)) / 2.0 / plotTree.totalW, plotTree.yoff)
+    plotMidText(cntrPt, parentPt, nodeTxt)
+
+    first = list(tree.keys())[0]
+    plotNode(first, cntrPt, parentPt, decisionNode)
+    second = tree[first]
+    plotTree.yoff = plotTree.yoff - 1.0 / plotTree.totalD
+    for key in second.keys():
+        if type(second[key]) is dict:
+            plotTree(second[key], cntrPt, str(key))
+        else:
+            plotTree.xoff = plotTree.xoff + 1.0 / plotTree.totalW
+            plotNode(second[key], (plotTree.xoff, plotTree.yoff), cntrPt, leafNode)
+            plotMidText((plotTree.xoff, plotTree.yoff), cntrPt, str(key))
+    plotTree.yoff = plotTree.yoff + 1.0 / plotTree.totalD
+
+def creatPlot(tree):
+    fig = plt.figure(1, facecolor = "white")
+    fig.clf()
+
+    axprops = dict(xticks=[], yticks=[])
+    creatPlot.ax1 = plt.subplot(111, frameon = False, **axprops)
+
+    plotTree.totalW = float(getLeafNum(tree))
+    plotTree.totalD = float(getDepth(tree))
+    plotTree.xoff = -0.5 / plotTree.totalW
+    plotTree.yoff = 1.0
+    plotTree(tree, (0.5, 1.0), '')
+
+    plt.show()
