@@ -1,0 +1,100 @@
+# author: Kitahara Kazusa
+# date: 2021/2/18
+
+from numpy import *
+import matplotlib.pyplot as plt
+import random
+
+def loadDataset():
+    dataMat = []
+    labelMat = []
+    fp = open(r'C:\Users\86519\Desktop\ML\5.Logistic\TestSet.txt')
+    for line in fp.readlines():
+        lineArr = line.strip().split()
+        dataMat.append([1.0, float(lineArr[0]), float(lineArr[1])])
+        labelMat.append(int(lineArr[2]))
+    return dataMat, labelMat
+
+def sigmoid(x):
+    return 1.0 / (1 + exp(-x))
+     # 改进的sigmoid函数： return 2 * 1.0 / (1 + exp(-2 * x)) - 1
+
+
+def gradAscent(dataMat, labelMat): # 批处理， 使用所有样本对weight进行更新
+    dataMatrix = mat(dataMat)
+    labelMatrix = mat(labelMat).transpose()
+    m, n = shape(dataMatrix)
+    weight = ones((n, 1))
+
+    alpha = 0.001
+    iterationTime = 500
+    for i in range(iterationTime):
+        h = sigmoid(dataMatrix * weight)
+        err = (labelMatrix - h)
+        weight = weight + alpha * dataMatrix.transpose() * err
+    return weight
+
+def stocGradAscent0(dataMatrix, labelMat): # 增量处理， 一次仅用一个样本来跟新weight
+    """
+    这种方式优于gradAscent函数，但是可能会出现参数收敛速度不一致的情况
+    weight中的参数，有一些可能收敛快，一些慢
+    """
+    m, n = shape(dataMatrix)
+    weight = ones(n)
+
+    alpha = 0.01
+    for i in range(m):
+        h = sigmoid(sum(dataMatrix[i] * weight))
+        err = labelMat[i] - h
+        weight = weight + alpha * err * dataMatrix[i]
+    return weight
+
+def stocGradAscent1(dataMatrix, labelMat, iterTime=150): # 随机增量处理， 每次随机选用一个样本对weight更新
+    """
+    优化了stocGradAscent1中的问题
+    """
+    m, n = shape(dataMatrix)
+    weight = ones(n)
+
+    for j in range(iterTime):
+        dataIndex = list(range(m))
+        for i in range(m):
+            alpha = 4 / (1.0 + j + i) + 0.01
+            randIndex = int(random.uniform(0, len(dataIndex) - 1))
+            h = sigmoid(sum(dataMatrix[randIndex] * weight))
+            err = labelMat[randIndex] - h
+            weight = weight + alpha * err * dataMatrix[randIndex]
+            del(dataIndex[randIndex])
+    return weight
+
+def plotBestFit(dataArr, labelMat, weight):
+    n = shape(dataArr)[0]
+    xcord1 = []; ycord1 = []
+    xcord2 = []; ycord2 = []
+    for i in range(n):
+        if int(labelMat[i]) == 1:
+            xcord1.append(dataArr[i][1])
+            ycord1.append(dataArr[i][2])
+        else:
+            xcord2.append(dataArr[i][1])
+            ycord2.append(dataArr[i][2])
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(xcord1, ycord1, s=30, c='red', marker='s') # scatter用于绘制x,y所表示的点
+    ax.scatter(xcord2, ycord2, s=30, c='green')
+    x = [arange(-3.0, 3.0, 0.1)]
+    y = (-weight[0] - weight[1] * mat(x)) / weight[2]
+    ax.plot(x, y, 'k.-')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.show()
+
+def testLR():
+    dataMat, labelMat = loadDataset()
+    dataArr = array(dataMat)
+    weight = stocGradAscent1(dataArr, labelMat)
+    print(weight)
+    plotBestFit(dataArr, labelMat, weight)
+
+if __name__ == '__main__':
+    testLR()
