@@ -1,0 +1,71 @@
+# author: Kitahara Kazusa
+# date: 2021/2/18
+
+from numpy import *
+import random
+import matplotlib.pyplot as plt
+
+def sigmoid(x):
+    return 1.0 / (1 + exp(-x))
+     # 改进的sigmoid函数： return 2 * 1.0 / (1 + exp(-2 * x))
+
+def classifyLR(x, weight):
+    prob = sigmoid(sum(x * weight))
+    if prob > 0.5:
+        return 1 # return class 1
+    else:
+        return 0
+
+def gradAscent(dataMat, labelMat, iterTime=150):
+    m, n = shape(dataMat)
+    weight = ones(n)
+
+    for j in range(iterTime):
+        dataIndex = list(range(m))
+        for i in range(m):
+            alpha = 4 / (1.0 + i + j) + 0.01
+            randIndex = int(random.uniform(0, len(dataIndex)))
+            h = sigmoid(sum(dataMat[randIndex] * weight))
+            err = labelMat[randIndex] - h
+            weight = weight + alpha * err * dataMat[randIndex]
+            del(dataIndex[randIndex])
+    return weight
+
+def test():
+    fpTrain = open(r'C:\Users\86519\Desktop\ML\5.Logistic\HorseColicTraining.txt')
+    fpTest = open(r'C:\Users\86519\Desktop\ML\5.Logistic\HorseColicTest.txt')
+
+    trainingSet = []
+    trainingLabel = []
+    for line in fpTrain.readlines():
+        currLine = line.strip().split('\t')
+        lineArr = []
+        for i in range(21):
+            lineArr.append(float(currLine[i]))
+        trainingSet.append(lineArr)
+        trainingLabel.append(float(currLine[21]))
+
+    weight = gradAscent(array(trainingSet), trainingLabel, 500)
+    errCnt = 0.0
+    testNum = 0
+    for line in fpTest.readlines():
+        testNum += 1
+        currLine = line.strip().split('\t')
+        lineArr = []
+        for i in range(21):
+            lineArr.append(float(currLine[i]))
+        if int(classifyLR(array(lineArr), weight) != int(currLine[21])):
+            errCnt += 1
+    errRate = float(errCnt) / testNum
+    print('The err rate in this test is: %f' % errRate)
+    return errRate
+
+def multiTest(testTime):
+    totalErr = 0.0
+    for i in range(testTime):
+        totalErr += test()
+    print('After %d iterations, the average error rate is: %f'
+          % (testTime, float(totalErr) / testTime))
+
+if __name__ == '__main__':
+    multiTest(10)
