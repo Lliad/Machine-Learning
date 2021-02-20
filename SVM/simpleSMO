@@ -1,0 +1,144 @@
+# author: Kitahara Kazusa
+# date: 2021/2/19
+
+from numpy import *
+import random
+import matplotlib.pyplot as plt
+
+def loadDataset():
+    fp = open(r'C:\Users\86519\Desktop\ML\6.SVM\testSet.txt')
+    dataList = []
+    labelList = []
+    for line in fp.readlines():
+        lineArr = line.strip().split('\t')
+        dataList.append([float(lineArr[0]), float(lineArr[1])])
+        labelList.append(float(lineArr[2]))
+    return dataList, labelList
+
+def randSelect(i, m):
+    j = i
+    while(j == i):
+        j = int(random.uniform(0, m))
+    return j
+
+def adjustAlpha(alpha, upperbound, lowerbound):
+    if alpha > upperbound:
+        alpha = upperbound
+    if alpha < lowerbound:
+        alpha = lowerbound
+    return alpha
+
+def simpleSMO(dataList, labelList, C, faultToler, iterTime):
+    dataMatrix = mat(dataList)
+    labelMatrix = mat(labelList).T
+    m, n = shape(dataMatirx)
+    alphaVec = zeros((m, 1))
+    b = 0
+    iterCnt = 0
+    while (iterCnt < iterTime):
+        alphaPairsChanged = 0
+        for i in range(m):
+            """
+            fXi = w^T * Xi + b
+            w^T = Σ（1~m）alpha[i] * label[i] * x[i]
+                = alpha[1] * label[1] * x[1]
+                + alpha[2] * label[2] * x[2]
+                ...
+                = [alpha[1]*label[1], alpha[2]*label[2],...,alpha[m]*label[m]]
+                * [x[1], x[2],...,x[m]].T
+                = [alpha[1]*label[1], alpha[2]*label[2],...,alpha[m]*label[m]] * dataMatrix
+            """
+            fXi = (multiply(alphaVec, labelMatrix).T * dataMatrix) * dataMatrix[i].T + b
+            Ei = fXi - float(labelMatrix[i])
+            if ((Ei * labelMatrix[i] < -faultToler) and (alphaVec[i] < C))\
+                or ((Ei * labelMatrix[i] > faultToler) and (alphaVec[i] > 0)):
+                """
+                这里的条件判断是根据KKT条件来的
+                Ei * labelMatrix[i] = Yi * ((w^T * Xi + b) - Yi) = Yi(w^T * Xi + b) -1
+                KKT条件为：alpha[i](1 - Yi(w^T * Xi + b))
+                当 alpha[i] = 0, Yi(w^T * Xi + b) >= 1
+                当 alpha[i] = C, Yi(w^T * Xi + b) <= 1
+                当 0 < alpha[i] < C, Yi(w^T * Xi + b) == 1
+                从而说明如果 0< alpha[i] < C 但是 Yi(w^T * Xi + b) != 1, 则该点是可以用于修正alpha[i]的
+                """
+                j = randSelect(i, m)
+                fXj = (multiply(alphaVec, labelMatrix).T * dataMatrix) * dataMatrix[j].T + b
+                Ej = fXj - labelMatrix[j]
+                alphaIOld = alphaVec[i].copy()
+                alphaJOld = alphaVec[j].copy()
+                if (labelMatrix[i] == labelMatrix[j]):
+                    lowerbound = max(0, alphaVec[i] + alphaVec[j] - C)
+                    upperbound = min(C, alphaVec[i] + alphaVec[j])
+                else:
+                    lowerbound = max(0, alphaVec[j] - alphaVec[i])
+                    upperbound = min(C, C + alphaVec[j] - alphaVec[i])
+                theta = 2.0 * dataMatrix[i] * dataMatrix[j].T\
+                    - dataMatrix[i] * dataMatrix[i].T\
+                    - dataMatrix[j] * dataMatrix[j].T
+                alphaVec[j][0] += labelMatrix[j][0] * (Ej - Ei)[0] / theta[0]
+                alphaVec[j] = adjustAlpha(alphaVec[j], upperbound, lowerbound)
+                alphaVec[i][0] += labelMatrix[i][0] * labelMatrix[j][0] * (alphaJOld - alphaVec[j])[0]
+
+                b1 = b - Ei - labelMatrix[i] * (alphaVec[i] - alphaIOld)\
+                    * dataMatrix[i] * dataMatrix[i].T - labelMatrix[j] * (alphaVec[j] - alphaJOld)\
+                    * dataMatrix[i] * dataMatrix[j].T
+                b2 = b - Ej - labelMatrix[i] * (alphaVec[i] - alphaIOld)\
+                    * dataMatrix[i] * dataMatrix[j].T - labelMatrix[j] * (alphaVec[j] - alphaJOld)\
+                    * dataMatrix[j] * dataMatrix[j].T
+                """
+                b参数的更新
+                当 Xi 为支持向量(即 0 < alpha[i] < C)，显然根据KKT条件可以用b1更新b; 同理对 Xj 也是
+                当两个点均不为支持向量，则使用(b1 + b2) / 2.0 更新b
+                """
+                if (0 < alphaVec[i]) and (alphaVec[i] < C):
+                    b = b1
+                elif (0 < alphaVec[j]) and (alphaVec[j] < C):
+                    b = b2
+                else:
+                    b = (b1 + b2) / 2.0
+                alphaPairsChanged += 1
+                #print('iter: %d i: %d, pairs changed %d' % (iterCnt, i, alphaPairsChanged))
+        if (alphaPairsChanged == 0):
+            iterCnt += 1
+        else:
+            iterCnt = 0
+        #print('Iteration number: %d' % iterCnt)
+    return b, alphaVec
+
+def calW(alphaVec, dataList, labelList):
+    dataMatrix = mat(dataList)
+    labelMatrix = mat(labelList).T
+    m, n = shape(dataMatrix)
+    w = zeros((n, 1))
+    for i in range(m):
+        w += multiply(alphaVec[i] * labelMatrix[i], dataMatrix[i].T)
+    return w
+
+
+if __name__ == '__main__':
+    dataList, labelList = loadDataset()
+    dataMatirx = mat(dataList)
+    labelMatrix = mat(labelList)
+
+    b, alphaVec = simpleSMO(dataList, labelList, 0.6, 0.001, 40)
+    w = calW(alphaVec, dataList, labelList)
+
+    if 0:
+        n = shape(dataList)[0]
+        xcord1 = []; ycord1 = []
+        xcord2 = []; ycord2 = []
+        for i in range(n):
+            if int(labelList[i]) == 1:
+                xcord1.append(dataList[i][0])
+                ycord1.append(dataList[i][1])
+            else:
+                xcord2.append(dataList[i][0])
+                ycord2.append(dataList[i][1])
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.scatter(xcord1, ycord1, s=30, c='red', marker='s')  # scatter用于绘制x,y所表示的点
+        ax.scatter(xcord2, ycord2, s=30, c='green')
+        x = [arange(-1, 10, 0.1)]
+        y = (- b - w[0] * mat(x)) / w[1]
+        plt.plot(x, y, 'k.-')
+        plt.show()
