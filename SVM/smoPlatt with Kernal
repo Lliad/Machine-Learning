@@ -1,0 +1,223 @@
+# author: Kitahara Kazusa
+# date: 2021/2/19
+
+from numpy import *
+import random
+import matplotlib.pyplot as plt
+
+def loadDataset(filename):
+    fp = open(filename)
+    dataList = []
+    labelList = []
+    for line in fp.readlines():
+        lineArr = line.strip().split('\t')
+        dataList.append([float(lineArr[0]), float(lineArr[1])])
+        labelList.append(float(lineArr[2]))
+    return dataList, labelList
+
+def kernalTrans(dataMatrix, datai, kTup):
+    """
+    :param dataMatrix: input data
+    :param datai: the i-th data in datamatrix
+    :param kTup: kernal function information
+    """
+    m, n = shape(dataMatrix)
+    K = mat(zeros((m, 1)))
+
+    if kTup[0] == 'lin': # 线性核函数，表现为向量的内积
+        K = dataMatrix * datai.T
+    elif kTup[0] == 'rbf':
+        for j in range(m):
+            deltaRow = dataMatrix[j] - datai
+            K[j] = deltaRow * deltaRow.T
+        K = exp(K / (-1 * kTup[1] ** 2))
+    else:
+        raise NameError('Kernal not defined')
+    return K
+
+class optStruct:
+    def __init__(self, dataMatrix, labelMatrix, C, fToler, kTup):
+        self.dataM = dataMatrix
+        self.labelM = labelMatrix
+        self.C = C
+        self.tol = fToler
+        self.m = shape(dataMatrix)[0]
+        self.alphaVec = mat(zeros((self.m, 1)))
+        self.b = 0
+        self.errCache = mat(zeros((self.m, 2))) # 第一列为标志位，第二列为值
+        self.K = mat(zeros((self.m, self.m)))
+        for i in range(self.m):
+            self.K[:, i] = kernalTrans(self.dataM, self.dataM[i], kTup)
+
+def adjustAlpha(alpha, upperbound, lowerbound):
+    if alpha > upperbound:
+        alpha = upperbound
+    if alpha < lowerbound:
+        alpha = lowerbound
+    return alpha
+
+def calErri(oS, i):
+    # fXi = (multiply(alphaVec, labelMatrix).T * dataMatrix) * dataMatrix[i].T + b
+    fXi = multiply(oS.alphaVec, oS.labelM).T * oS.K[:, i] + oS.b
+    Ei = fXi - float(oS.labelM[i])
+    return Ei
+
+def randSelect(i, m):
+    j = i
+    while(j == i):
+        j = int(random.uniform(0, m))
+    return j
+
+def selectJ(i, oS, Ei):
+    maxK = -1; maxDeltaErr = 0; Ej = 0
+    oS.errCache[i] = [1, Ei]
+    validErrCacheList = nonzero(oS.errCache[:, 0].A)[0] # 返回非零E值所对应的alpha，这里的有效即为非零
+    if (len(validErrCacheList)) > 1:
+        for k in validErrCacheList:
+            if k == i:
+                continue
+            Ek = calErri(oS, k)
+            deltaErr = abs(Ei - Ek)
+            if (deltaErr > maxDeltaErr):
+                maxK = k
+                maxDeltaErr = deltaErr
+                Ej = Ek
+        return maxK, Ej
+    else:
+        j = randSelect(i, oS.m)
+        Ej = calErri(oS, j)
+    return j, Ej
+
+def updateEk(oS, k):
+    Ek = calErri(oS, k)
+    oS.errCache[k] = [1, Ek]
+
+def innerLoop(i, oS):
+    Ei = calErri(oS, i)
+    if ((oS.labelM[i] * Ei < -oS.tol) and (oS.alphaVec[i] < oS.C))\
+        or ((oS.labelM[i] * Ei > oS.tol) and (oS.alphaVec[i] > 0)):
+        j, Ej = selectJ(i, oS, Ei)
+        alphaIOld = oS.alphaVec[i].copy()
+        alphaJOld = oS.alphaVec[j].copy()
+        if (oS.labelM[i] != oS.labelM[j]):
+            lower = max(0, oS.alphaVec[j] - oS.alphaVec[i])
+            upper = min(oS.C, oS.C + oS.alphaVec[j] - oS.alphaVec[i])
+        else:
+            lower = max(0, oS.alphaVec[j] + oS.alphaVec[i] - oS.C)
+            upper = min(oS.C, oS.alphaVec[j] + oS.alphaVec[i])
+        """
+        theta = 2.0 * oS.dataM[i] * oS.dataM[j].T\
+            - oS.dataM[i] * oS.dataM[i].T\
+            - oS.dataM[j] * oS.dataM[j].T
+        """
+        theta = 2.0 * oS.K[i, j] - oS.K[i, i] - oS.K[j, j]
+        if (theta >= 0):
+            print('thate >= 0')
+            return 0
+        oS.alphaVec[j] += oS.labelM[j] * (Ej - Ei) / theta
+        oS.alphaVec[j] = adjustAlpha(oS.alphaVec[j], upper, lower)
+        updateEk(oS, j)
+        if (abs(alphaJOld - oS.alphaVec[j]) < 0.00001):
+            print('j not moving enough')
+            return 0
+        oS.alphaVec[i] += oS.labelM[j] * oS.labelM[i] * (alphaJOld - oS.alphaVec[j])
+        updateEk(oS, i)
+        """
+         b1 = oS.b - Ei - oS.labelM[i] * (oS.alphaVec[i] - alphaIOld) \
+             * oS.dataM[i] * oS.dataM[i].T - oS.labelM[j] * (oS.alphaVec[j] - alphaJOld) \
+             * oS.dataM[i] * oS.dataM[j].T
+        b2 = oS.b - Ej - oS.labelM[i] * (oS.alphaVec[i] - alphaIOld) \
+             * oS.dataM[i] * oS.dataM[j].T - oS.labelM[j] * (oS.alphaVec[j] - alphaJOld) \
+             * oS.dataM[j] * oS.dataM[j].T
+        """
+        b1 = oS.b - Ei - oS.labelM[i] * (oS.alphaVec[i] - alphaIOld)\
+            * oS.K[i, i] - oS.labelM[j] * (oS.alphaVec[j] - alphaJOld) * oS.K[i, j]
+        b2 = oS.b - Ej - oS.labelM[i] * (oS.alphaVec[i] - alphaIOld)\
+            * oS.K[i, j] - oS.labelM[j] * (oS.alphaVec[j] - alphaJOld) * oS.K[j, j]
+        if (0 < oS.alphaVec[i]) and (oS.alphaVec[i] < oS.C):
+            oS.b = b1
+        elif (0 < oS.alphaVec[j]) and (oS.alphaVec[j] < oS.C):
+            oS.b = b2
+        else:
+            oS.b = (b1 + b2) / 2.0
+        return 1
+    else:
+        return 0
+
+def smoPlatt(dataList, labelList, C, fToler, iterTime, kTup=('lin',0)):
+    oS = optStruct(mat(dataList), mat(labelList).T, C, fToler, kTup)
+    iterCnt = 0
+    entireSet = True
+    alphaPairsChanged = 0
+    while (iterCnt < iterTime) and ((alphaPairsChanged > 0) or (entireSet)):
+        alphaPairsChanged = 0
+        if entireSet:
+            for i in range(oS.m):
+                alphaPairsChanged += innerLoop(i, oS)
+                print('fullSet, iter: %d i: %d, pairs changed %d' % \
+                      (iterCnt, i, alphaPairsChanged))
+            iterCnt += 1
+        else:
+            nonBoundIs = nonzero((oS.alphaVec.A > 0) * (oS.alphaVec.A < C))[0]
+            for i in nonBoundIs:
+                alphaPairsChanged += innerLoop(i, oS)
+                print('non-bound, iter: %d i: %d, pairs changed %d' % \
+                      (iterCnt, i, alphaPairsChanged))
+            iterCnt += 1
+        if entireSet:
+            entireSet = False
+        elif (alphaPairsChanged == 0):
+            entireSet = True
+        print('Iteration number: %d' % iterCnt)
+    return oS.b, oS.alphaVec
+
+def calW(alphaVec, dataList, labelList):
+    dataMatrix = mat(dataList)
+    labelMatrix = mat(labelList).T
+    m, n = shape(dataMatrix)
+    w = zeros((n, 1))
+    for i in range(m):
+        w += multiply(alphaVec[i] * labelMatrix[i], dataMatrix[i].T)
+    return w
+
+def testRbf(k1 = 1.3):
+    dataList, labelList = loadDataset(r'C:\Users\86519\Desktop\ML\6.SVM\testSetRBF.txt')
+    b, alphaVec = smoPlatt(dataList, labelList, 200, 0.0001, 10000, ('rbf', k1))
+    dataMatrix = mat(dataList)
+    labelMatrix = mat(labelList).T
+
+    svInd = nonzero(alphaVec.A > 0)[0]
+    """
+    matrixName.A会将matrix变为array
+    nonzero(a)会返回a中非零元素的下标
+    e.g： mat1 = mat([[1, 2 ,3],     则 nonzero(mat1.A) == 
+                    [0, 1, 2],  (array([0, 0, 0, 1, 1], dtype=int64), array([0, 1, 2, 1, 2], dtype=int64))
+                    [0, 0, 0]   第一个array为横坐标， 第二个为纵坐标，即mat1[0][0] mat1[0][1]等元素非零
+                    ])
+    """
+    sVs = dataMatrix[svInd] # 得到支持向量组成的矩阵
+    labelSV = labelMatrix[svInd]
+    print('There are %d support vectors: ' % shape(sVs)[0])
+    m, n = shape(dataMatrix)
+    errCnt = 0
+    for i in range(m):
+        kernalEval = kernalTrans(sVs, dataMatrix[i], ('rbf', k1)) # 仅使用支持向量数据集进行分类
+        predict = kernalEval.T * multiply(labelSV, alphaVec[svInd]) + b
+        if sign(predict) != sign(labelList[i]):
+            errCnt += 1
+    print('The trainging error rate is: %f' % (float(errCnt / m)))
+
+    dataList, labelList = loadDataset(r'C:\Users\86519\Desktop\ML\6.SVM\testSetRBF2.txt')
+    errCnt = 0
+    dataMatrix = mat(dataList)
+    labelMatrix = mat(labelList)
+    m, n = shape(dataMatrix)
+    for i in range(m):
+        kernalEval = kernalTrans(sVs, dataMatrix[i], ('rbf', k1))
+        predict = kernalEval.T * multiply(labelSV, alphaVec[svInd]) + b
+        if sign(predict) != sign(labelList[i]):
+            errCnt += 1
+    print('The test error rate is: %f' % (float(errCnt / m)))
+
+if __name__ == '__main__':
+    testRbf(0.5)
