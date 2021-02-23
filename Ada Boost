@@ -1,0 +1,110 @@
+# author: Kitahara Kazusa
+# date: 2021/2/23
+
+from numpy import *
+
+def loadDataset(fileName):
+    featureNum = len(open(fileName).readline().split('\t'))
+    dataMatrix = []
+    labelMatrix = []
+    fp = open(fileName)
+    for line in fp.readlines():
+        lineArr = []
+        currLine = line.strip().split('\t')
+        for i in range(featureNum - 1):
+            lineArr.append(float(currLine[i]))
+        dataMatrix.append(lineArr)
+        labelMatrix.append(float(currLine[-1]))
+    return dataMatrix, labelMatrix
+
+def stumpClassify(dataMatrix, feature, val, classifyIneq):
+    resArr = ones((shape(dataMatrix)[0], 1))
+    if classifyIneq == 'lt':
+        resArr[dataMatrix[:, feature] <= val] = -1.0
+    else:
+        resArr[dataMatrix[:, feature] > val] = -1.0
+    return resArr
+
+def buildStump(dataArr, labelArr, D):
+    """
+    :param dataArr:
+    :param labelArr:
+    :param D: 数据的权重向量
+    """
+    dataMatrix = mat(dataArr)
+    labelMatrix = mat(labelArr).T
+    m, n = shape(dataMatrix)
+    bestStump = {}
+    bestClasEst = mat(zeros((m, 1)))
+    numSteps = 10.0
+    minErr = inf
+
+    for i in  range(n): # 遍历每一个特征
+        rangeMin = dataMatrix[:, i].min()
+        rangeMax = dataMatrix[:, i].max()
+        stepSize = (rangeMax - rangeMin) / numSteps
+        for j in range(-1, int(numSteps) + 1): # 每次循环将当前特征用于分类的值进行增加，以确定最佳的分类阈值
+            for inEqual in ['lt', 'gt']:
+                val = rangeMin + float(j) * stepSize
+                predictLabel = stumpClassify(dataMatrix, i, val, inEqual)
+                errArr = mat(ones((m, 1)))
+                errArr[predictLabel == labelMatrix] = 0
+                weightedErr = D.T * errArr
+                if weightedErr < minErr:
+                    minErr = weightedErr
+                    bestClasEst = predictLabel.copy()
+                    bestStump['dim'] = i
+                    bestStump['val'] = val
+                    bestStump['inEq'] = inEqual
+    return bestStump, minErr, bestClasEst
+
+def adaBoostTrainDS(dataArr, labelArr, iterNum=40):
+    weakClassArr = []
+    m = shape(dataArr)[0]
+    D = mat(ones((m, 1)) / m) # 初始化权重向量， 每个数据的权重为1/m
+    aggClassEst = mat(zeros((m, 1)))
+
+    for i in range(iterNum):
+        beatStump, err, classEst = buildStump(dataArr, labelArr, D)
+        #print('D: ', D.T)
+        alpha = float(0.5 * log((1.0 - err) / max(err, 1e-16)))
+        beatStump['alpha'] = alpha
+        weakClassArr.append(beatStump)
+        #print('Class Est:', classEst.T)
+        # 更新D
+        expon = multiply(-1 * alpha * mat(labelArr).T, classEst)
+        D = multiply(D, exp(expon))
+        D = D / D.sum()
+
+        aggClassEst += alpha * classEst
+        #print('aggClassEst: ' , aggClassEst.T)
+        aggErr = multiply(sign(aggClassEst) != mat(labelArr).T, ones((m, 1)))
+        errRate = aggErr.sum() / m
+        #print('Total err rate: ', errRate)
+        if errRate == 0.0:
+            break
+    return weakClassArr
+
+def adaClassify(data2Classify, classifyArr):
+    dataMatrix = mat(data2Classify)
+    m = shape(dataMatrix)[0]
+    aggClassEst = mat(zeros((m, 1)))
+
+    for i in range(len(classifyArr)):
+        classEst = stumpClassify(dataMatrix, classifyArr[i]['dim'], classifyArr[i]['val'],\
+                                classifyArr[i]['inEq'])
+        aggClassEst += classifyArr[i]['alpha'] * classEst
+        #print(aggClassEst)
+    return sign(aggClassEst)
+
+if __name__ == '__main__':
+    dataArr, labelArr = loadDataset(r'D:\Machine Learing\7.AdaBoost\horseColicTraining2.txt')
+    classifyArr = adaBoostTrainDS(dataArr, labelArr)
+    testArr, testLabelArr = loadDataset(r'D:\Machine Learing\7.AdaBoost\horseColicTest2.txt')
+    predict = adaClassify(testArr, classifyArr)
+    #print(predict)
+    testMatrix = mat(testArr)
+    m = shape(testMatrix)[0]
+    errCnt = mat(ones((m, 1)))
+    print('Total err number is: ', errCnt[predict != mat(testLabelArr).T].sum())
+    print('Error rate is: ', errCnt[predict != mat(testLabelArr).T].sum() / float(m))
