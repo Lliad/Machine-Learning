@@ -1,0 +1,77 @@
+# author: Kitahara Kazusa
+# date: 2021/3/1
+
+from numpy import *
+import matplotlib.pyplot as plt
+
+def loadDataset(filename):
+    dataList, labelList = [], []
+    featureNum = len(open(filename).readline().split('\t')) - 1
+    fp = open(filename)
+    for line in fp.readlines():
+        lineArr = []
+        currLine = line.strip().split('\t')
+        for i in range(featureNum):
+            lineArr.append(float(currLine[i]))
+        dataList.append(lineArr)
+        labelList.append(float(currLine[-1]))
+    return dataList, labelList
+
+def standRegres(xArr, yArr): # 普通最小二乘法
+    xMatrix = mat(xArr)
+    yMatrix = mat(yArr).T
+
+    xTx = xMatrix.T * xMatrix
+    if linalg.det(xTx) == 0.0: # 计算行列式的值
+        print('This matrix can not be inverse')
+        return
+    w = xTx.I * (xMatrix.T * yMatrix)
+    return w
+
+def lwlr(testPoint, xArr, yArr, k=1.0): # 局部加权回归
+    xMatrix, yMatrix = mat(xArr), mat(yArr).T
+    m = shape(xMatrix)[0]
+    weight = mat(eye(m))
+    for j in range(m):
+        diff = testPoint - xMatrix[j]
+        weight[j, j] = exp(diff * diff.T / (-2.0 * k ** 2))
+    xTx = xMatrix.T * weight * xMatrix
+    if linalg.det(xTx) == 0.0:
+        print('This matrix can not be inverse.')
+        return
+    w = xTx.I * xMatrix.T * weight * yMatrix
+    return testPoint * w
+
+def lwlrTest(testArr, xArr, yArr, k=1.0):
+    m = shape(testArr)[0]
+    yHat = zeros(m)
+    for i in range(m):
+        yHat[i] = lwlr(testArr[i], xArr, yArr, k)
+    return yHat
+
+if __name__ == '__main__':
+    xArr, yArr = loadDataset(r'D:\Machine_Learing\8.Regression\data.txt')
+    """
+    #w = standRegres(xArr, yArr)
+    xMat, yMat = mat(xArr), mat(yArr)
+    yHat = xMat * w
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(xMat[:, 1].flatten().A[0], yMat.T[:, 0].flatten().A[0]) # 绘制原始数据
+    xCopy = xMat.copy()
+    xCopy.sort(0)
+    yHat = xCopy * w
+    ax.plot(xCopy[:, 1], yHat) # 绘制拟合直线
+    plt.show()
+    """
+    yHat = lwlrTest(xArr, xArr, yArr, 0.01)
+    xMat = mat(xArr)
+    strInd = xMat[:, 1].argsort(0)
+    xSort = xMat[strInd][:, 0, :]
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.plot(xSort[:, 1], yHat[strInd])
+    ax.scatter(xMat[:, 1].flatten().A[0], mat(yArr).T.flatten().A[0], s=2, c='red')
+    plt.show()
+
+
