@@ -1,0 +1,95 @@
+# author: Kitahara Kazusa
+# date: 2021/3/1
+
+from numpy import *
+import matplotlib.pyplot as plt
+
+def loadDataset(filename):
+    dataList, labelList = [], []
+    featureNum = len(open(filename).readline().split('\t')) - 1
+    fp = open(filename)
+    for line in fp.readlines():
+        lineArr = []
+        currLine = line.strip().split('\t')
+        for i in range(featureNum):
+            lineArr.append(float(currLine[i]))
+        dataList.append(lineArr)
+        labelList.append(float(currLine[-1]))
+    return dataList, labelList
+
+def calErr(yArr, yHat):
+    return ((yArr - yHat) ** 2).sum()
+
+def regularize(matrix): # 对矩阵进行标准化
+    inM = matrix.copy()
+    means, mVar = mean(inM, 0), var(inM, 0)
+    inM = (inM - means) / mVar
+    return inM
+
+def ridgeRegres(xArr, yArr, lam=0.2): # 岭回归
+    xMatrix, yMatrix = mat(xArr), mat(yArr).T
+    xTx = xMatrix.T * xMatrix
+    denom = xTx + eye(shape(xMatrix)[1]) * lam
+    if linalg.det(denom) == 0.0:
+        print('This matrix can not inverse.')
+        return
+    w = denom.I * xMatrix.T  * yMatrix
+    return w
+
+def ridgeTest(xArr, yArr):
+    xMatrix, yMatrix = mat(xArr), mat(yArr).T
+    """
+    数据标准化
+    """
+    xMeans, xVar = mean(xMatrix, 0), var(xMatrix, 0)
+    xMatrix = (xMatrix - xMeans) / xVar
+    yMeans = mean(yMatrix, 0)
+    yMatrix = yMatrix - yMeans
+
+    testNum = 30
+    wMatrix = zeros((testNum, shape(xMatrix)[1]))
+    for i in range(testNum):
+        w = ridgeRegres(xArr, yArr, exp(i-10))
+        wMatrix[i] = w.T
+    return wMatrix
+
+def stageWise(xArr, yArr, eps=0.01, iterNum=100):
+    """
+    :param eps: 每次迭代调整的步长
+    :param iterNum: 迭代次数
+    """
+    xMatrix, yMatrix = mat(xArr), mat(yArr).T
+    yMean = mean(yMatrix, 0)
+    yMatrix = yMatrix - yMean
+    xMatrix = regularize(xMatrix)
+    m, n = shape(xMatrix)
+    returnMat = zeros((iterNum, n))
+    currW = zeros((n, 1))
+    wsMax = currW.copy()
+    for i in range(iterNum):
+        print(currW.T)
+        minErr = inf
+        for j in range(n):
+            for sign in [-1, 1]:
+                wsTest = currW.copy()
+                wsTest[j] += eps * sign
+                yTest = xMatrix * wsTest
+                err = calErr(yMatrix.A, yTest.A)
+                if err < minErr:
+                    minErr = err
+                    wsMax = wsTest
+        currW = wsMax.copy()
+        returnMat[i] = currW.T
+    return returnMat
+
+if __name__ == '__main__':
+    xArr, yArr = loadDataset(r'D:\Machine_Learing\8.Regression\abalone.txt')
+    """
+    ridgeWeight = ridgeTest(xArr, yArr)
+    print(ridgeWeight[1])
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.plot(ridgeWeight)
+    plt.show()
+    """
+    stageWise(xArr, yArr, 0.001, 5000)
