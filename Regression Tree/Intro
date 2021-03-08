@@ -1,0 +1,111 @@
+# author: Kitahara Kazusa
+# date: 2021/3/8
+
+from numpy import *
+
+def loadData(filename):
+    dataArr = []
+    fp = open(filename)
+    for line in fp.readlines():
+        currLine = line.strip().split('\t')
+        fltLine = []
+        for i in currLine:
+            fltLine.append(float(i))
+        dataArr.append(fltLine)
+    return dataArr
+
+def spiltData(dataset, feature, value):
+    mat0 = dataset[nonzero(dataset[:, feature] > value)[0], :]
+    mat1 = dataset[nonzero(dataset[:, feature] <= value)[0], :]
+    return mat0, mat1
+
+def regLeaf(dataset):
+    return mean(dataset[:, -1])
+
+def regErr(dataset):
+    return var(dataset[:, -1]) * shape(dataset)[0]
+
+def chooseBestSplit(dataset, leafType=regLeaf, errType=regErr, ops=(1, 4)):
+    tolS, tolN = ops[0], ops[1]
+    if len(set(dataset[:, -1].T.tolist()[0])) == 1: # 所有值相等
+        return None, leafType(dataset)
+    m, n = shape(dataset)
+    S = errType(dataset)
+    bestS = inf
+    bestInx, bestVal = 0, 0
+    for featureInx in range(n-1):
+        for splitVal in set(dataset[:, featureInx].T.tolist()[0]):
+            mat0, mat1 = spiltData(dataset, featureInx, splitVal)
+            newS = errType(mat1) + errType(mat0)
+            if newS < bestS:
+                bestS = newS
+                bestInx = featureInx
+                bestVal = splitVal
+    if (S - bestS) < tolS: # 如果误差减小不大，则退出
+        return None, leafType(dataset)
+    mat0, mat1 = spiltData(dataset, bestInx, bestVal)
+    if (shape(mat1)[0] < tolN) or (shape(mat0)[0] < tolN): # 如果分割的数据集过小，也退出
+        return None, leafType(dataset)
+    return bestInx, bestVal
+
+def creatTree(dataset, leafType=regLeaf, errType=regErr, ops=(1, 4)):
+    """
+    :param ops: ops[0]为允许的误差下降值， ops[1]为切分的最少样本数
+    """
+    feature, val = chooseBestSplit(dataset, leafType, errType, ops)
+    if feature == None:
+        return val
+    retTree = {}
+    retTree['spInd'] = feature
+    retTree['spVal'] = val
+    left, right = spiltData(dataset, feature, val)
+    retTree['left'] = creatTree(left, leafType, errType, ops)
+    retTree['right'] = creatTree(right, leafType, errType, ops)
+    return retTree
+
+"""
+回归树剪枝，从上而下找到叶节点，通过测试集判断将这些节点合并是否能降低误差
+"""
+
+def isTree(obj):
+    return (type(obj).__name__ == 'dict')
+
+def getMean(tree):
+    if isTree(tree['right']):
+        tree['right'] == getMean(tree['right'])
+    if isTree(tree['left']):
+        tree['left'] == getMean(tree['left'])
+    return (tree['left'] + tree['right']) / 2.0
+
+def prune(tree, testData): #剪枝主函数
+    if shape(testData)[0] == 0: # 如果没有测试数据，返回树的均值
+        return getMean(tree)
+    if (isTree(tree['left'])) or (isTree(tree['right'])):
+        lSet, rSet = spiltData(testData, tree['spInd'], tree['spVal'])
+    if isTree(tree['left']): # 对左边部分剪枝
+        tree['left'] = prune(tree['left'], lSet)
+    if isTree(tree['right']): # 对右边部分剪枝
+        tree['right'] = prune(tree['right'], rSet)
+        
+    if not isTree(tree['left']) and not isTree(tree['right']):
+        lSet, rSet = spiltData(testData, tree['spInd'], tree['spVal'])
+        errNoMerge = sum(power(lSet[:, -1] - tree['left'], 2))\
+                    + sum(power(rSet[:, -1] - tree['right'], 2))
+        treeMean = (tree['left'] + tree['right']) / 2.0
+        errMerge = sum(power(testData[:, -1] - treeMean, 2))
+        if errMerge < errNoMerge:
+            print('Merging')
+            return treeMean
+        else:
+            return tree
+    else:
+        return tree
+
+if __name__ == "__main__":
+    dataArr = loadData(r'D:\Machine_Learing\9.RegTrees\data3.txt')
+    testArr = loadData(r'D:\Machine_Learing\9.RegTrees\data3test.txt')
+    dataMat = mat(dataArr)
+    testMat = mat(testArr)
+    tree = creatTree(dataMat)
+    prune(tree, testMat)
+    print(tree)
