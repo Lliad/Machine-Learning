@@ -1,0 +1,107 @@
+# author: Kitahara Kazusa
+# date: 2021/3/9
+
+from numpy import *
+import matplotlib.pyplot as plt
+
+def loadDataset(filename):
+    dataArr = []
+    fp = open(filename)
+    for line in fp.readlines():
+        curr = line.strip().split('\t')
+        lineArr = []
+        for i in curr:
+            lineArr.append(float(i))
+        dataArr.append(lineArr)
+    return dataArr
+
+def distEclud(vec1, vec2):
+    return sqrt(sum(power(vec1 - vec2, 2)))
+
+def randCent(dataset, k):
+    n = shape(dataset)[1]
+    centers = mat(zeros((k, n)))
+    for j in range(n):
+        minJ = min(dataset[:, j])
+        rangeJ = float(max(dataset[:, j]) - minJ)
+        # numpy.random.rand(dia1, dia2, ...) 按照维数生成随机矩阵，矩阵元素在[0, 1)之间
+        centers[:, j] = minJ + rangeJ * random.rand(k, 1)
+    return centers
+
+def kMeans(dataset, k, distMeas=distEclud, creatCenter=randCent):
+    m = shape(dataset)[0]
+    clusterAssment = mat(zeros((m, 2))) # m × 2的矩阵，一列用于记录聚类结果，一列用于存储误差
+    centers = creatCenter(dataset, k) # 第一次迭代之前， 随机选取初始的质心
+    ifClusterChanged = True
+    while ifClusterChanged:
+        ifClusterChanged = False
+        for i in range(m):
+            minDist, minIndex = inf, -1 # 距离以及该点到对应簇类在centers矩阵中的索引值
+            for j in range(k):
+                distJI = distMeas(dataset[i], centers[j])
+                if distJI < minDist:
+                    minDist = distJI
+                    minIndex = j
+            if clusterAssment[i, 0] != minIndex:
+                ifClusterChanged = True
+            clusterAssment[i, :] = minIndex, minDist ** 2
+        #print(centers)
+        # 更新质心的位置
+        for cent in range(k):
+            ptsInCluster = dataset[nonzero(clusterAssment[:, 0].A == cent)[0]]
+            centers[cent, :] = mean(ptsInCluster, axis=0)
+        return centers, clusterAssment
+
+def binKMeans(dataset, k, distMeas=distEclud):
+    m = shape(dataset)[0]
+    clusterAssment = mat(zeros((m, 2)))
+    # 创建初始的簇心
+    center0 = mean(dataset, axis=0).tolist()[0]
+    centList = [center0]
+    for i in range(m):
+        clusterAssment[i, 1] = distMeas(dataset[i], mat(center0)) ** 2
+    while (len(centList) < k):
+        minSSE = inf
+        for i in range(len(centList)):
+            ptsInCurrCluster = dataset[nonzero(clusterAssment[:, 0].A == i)[0], :]
+            centerMat, splitClusterAss = kMeans(ptsInCurrCluster, 2, distMeas)
+            splitSSE = sum(splitClusterAss[:, 1]) # 划分出去部分的SSE
+            unsplitSSE = sum(clusterAssment[nonzero(clusterAssment[:, 0].A != i)[0], 1]) # 未划分部分的SSE
+            if (splitSSE + unsplitSSE) < minSSE:
+                minSSE = splitSSE + unsplitSSE
+                bestCentToSplit = i
+                bestNewCents = centerMat
+                bestClusterAss = splitClusterAss.copy()
+        # 在i-th簇上聚类，产生两个新的簇(0, 1)，0簇保留原来的簇类id，即i，1簇分配一个新的簇id，即在原有centList上追加
+        bestClusterAss[nonzero(bestClusterAss[:, 0].A == 1)[0], 0] = len(centList)
+        bestClusterAss[nonzero(bestClusterAss[:, 0].A == 0)[0], 0] = bestCentToSplit
+        # 更新簇类列表，进行追加
+        centList[bestCentToSplit] = bestNewCents[0]
+        centList.append(bestNewCents[1])
+        # 更新分类结果
+        clusterAssment[nonzero(clusterAssment[:, 0].A == bestCentToSplit)[0]] = bestClusterAss
+    return centList, clusterAssment
+
+
+if __name__ == '__main__':
+    #dataArr = loadDataset(r'D:\Machine_Learing\10.KMeans\testSet.txt')
+    dataArr = loadDataset(r'D:\Machine_Learing\10.KMeans\testSet2.txt')
+    dataMat = mat(dataArr)
+
+    xcord, ycord = [], []
+    for i in range(shape(dataMat)[0]):
+        xcord.append(dataMat[i, 0])
+        ycord.append(dataMat[i, 1])
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(xcord, ycord, s=30)
+    #centers, clusterAssment = kMeans(dataMat, 4)
+    centers, clusterAssment = binKMeans(dataMat, 3)
+    cxCord, cyCord = [], []
+    for i in  range(shape(centers)[0]):
+        cxCord.append(centers[i][0, 0])
+        cyCord.append(centers[i][0, 1])
+    ax.scatter(cxCord, cyCord, marker='s')
+    plt.show()
+
+
